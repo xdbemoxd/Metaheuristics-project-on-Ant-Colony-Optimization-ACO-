@@ -1,48 +1,26 @@
 import time
 import numpy as np
-# Numba: compila a código máquina nativo
-# prange: parallel range — equivalente a #pragma omp parallel for en C
 from numba import njit, prange, float64, int32, int8
 
-# ─────────────────────────────────────────────
-# @njit(parallel=True) — compilado a código máquina
-# prange — las hormigas corren en hilos nativos (no procesos)
-#
-# Por qué es más rápido que multiprocessing:
-#   - Sin serialización de datos entre procesos
-#   - Sin overhead de fork/join de procesos
-#   - Los hilos comparten memoria igual que en tu proyecto C
-#   - El loop interno también se compila a instrucciones SIMD
-# ─────────────────────────────────────────────
 
 @njit(parallel=True, cache=True)
 def _correr_colonia(pesos, valores, eta_base, feromonas,
                     capacidad, alfa, n,
                     num_hormigas, iteraciones, Rho, q):
-    """
-    Todo el algoritmo ACO compilado a código máquina.
-    parallel=True hace que el prange de hormigas use hilos nativos.
-    cache=True guarda la compilación en disco — la segunda ejecución
-    arranca instantáneo.
-    """
+    
     mejor_val = 0
     mejor_sol = np.zeros(n, dtype=int8)
 
-    # Buffer de soluciones de la iteración (hormigas x ítems)
     soluciones = np.zeros((num_hormigas, n), dtype=int8)
 
     for it in range(iteraciones):
 
-        # ── prange: cada hormiga corre en un hilo nativo ──
-        # Equivalente al pthread_create de tu proyecto C,
-        # pero sin overhead de fork ni serialización
+        
         for h in prange(num_hormigas):
             peso_actual = 0
-            # Máscara booleana de candidatos para esta hormiga
             candidatos = np.ones(n, dtype=int8)
 
             while True:
-                # Encontrar candidatos válidos
                 hay_valido = False
                 for i in range(n):
                     if candidatos[i] == 1 and pesos[i] <= capacidad - peso_actual:
@@ -51,7 +29,6 @@ def _correr_colonia(pesos, valores, eta_base, feromonas,
                 if not hay_valido:
                     break
 
-                # Calcular atractivos solo para candidatos válidos
                 suma = 0.0
                 atractivos = np.zeros(n, dtype=float64)
                 for i in range(n):
@@ -60,9 +37,9 @@ def _correr_colonia(pesos, valores, eta_base, feromonas,
                         atractivos[i] = tau * eta_base[i]
                         suma += atractivos[i]
 
-                # Selección por ruleta
+                
                 if suma == 0.0:
-                    # Fallback: elegir el primero válido
+                    
                     for i in range(n):
                         if candidatos[i] == 1 and pesos[i] <= capacidad - peso_actual:
                             seleccionado = i
@@ -82,11 +59,11 @@ def _correr_colonia(pesos, valores, eta_base, feromonas,
                 peso_actual += pesos[seleccionado]
                 candidatos[seleccionado] = 0
 
-        # ── Evaporación vectorizada ──
+        
         for i in range(n):
             feromonas[i] *= (1.0 - Rho)
 
-        # ── Acciones demonio: encontrar mejor de la iteración ──
+        
         for h in range(num_hormigas):
             val = 0
             for i in range(n):
@@ -96,13 +73,12 @@ def _correr_colonia(pesos, valores, eta_base, feromonas,
                 for i in range(n):
                     mejor_sol[i] = soluciones[h, i]
 
-        # ── Refuerzo elitista sobre mejor global ──
+       
         refuerzo = q * mejor_val / 100.0
         for i in range(n):
             if mejor_sol[i] == 1:
                 feromonas[i] += refuerzo
 
-        # Reset buffer para siguiente iteración
         for h in range(num_hormigas):
             for i in range(n):
                 soluciones[h, i] = 0
@@ -122,7 +98,6 @@ class ACO_Mochila:
         self.pesos    = np.array(pesos,   dtype=np.int32)
         self.valores  = np.array(valores, dtype=np.int32)
 
-        # eta precalculada una sola vez — igual que en la versión numpy
         self.eta_base = (self.valores / self.pesos) ** self.beta
 
         self.feromonas             = np.ones(self.n, dtype=np.float64)
@@ -133,8 +108,6 @@ class ACO_Mochila:
         print("Compilando con Numba (solo la primera vez)...")
         t_comp = time.time()
 
-        # Numba compila en el primer llamado — los siguientes son instantáneos
-        # cache=True guarda la compilación en disco (.numba_cache/)
         mejor_val, mejor_sol = _correr_colonia(
             self.pesos, self.valores, self.eta_base, self.feromonas,
             self.capacidad, self.alfa, self.n,
