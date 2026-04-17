@@ -2,6 +2,7 @@
 
 1. `python -m venv venv`
 2. `venv\Scripts\activate` (windows), `source venv/bin/activate` Mac or Linux
+3. `pip install -r requirements.txt`
 
 # second step: run the program
 
